@@ -1,26 +1,54 @@
 <?php
 
+session_start();
+
 $host = "ftp.conradtweb.com";
 $username = "installer@conradtweb.com";
 $password = "installer";
 
-$connection = ftp_connect($host);
-$result = ftp_login($connection, $username, $password);
+$temppath = "temp.zip";
 
 //file_put_contents("Tmpfile.zip", fopen('https://github.com/joeconradt/inkstand/archive/master.zip', 'r'));
 
 if($_SERVER['REQUEST_METHOD'] === 'POST') {
-	$package = $_POST['version'];
 
-	set_time_limit(500);
+	if($_POST['start_download'] == '1') {
 
-	if (ftp_get($connection	, 'package.zip', $package, FTP_BINARY)) {
-    	echo "Successfully written to $local_file\n";
+		$connection = ftp_connect($host);
+		$result = ftp_login($connection, $username, $password);
+
+		$package = $_POST['version'];
+
+		$_SESSION['size'] = ftp_size($connection, $package);
+
+		set_time_limit(500);
+
+		if (ftp_get($connection	, $temppath, $package, FTP_BINARY)) {
+	    	echo "Successfully written to $local_file\n";
+		} else {
+		    echo "There was a problem\n";
+		}
+		die();
 	} else {
-	    echo "There was a problem\n";
+
+		/*$source = $_SESSION['size'];
+
+		$local = filesize($temppath);
+
+		$percent = $local / $source;
+
+		echo "source: " . $source . "\n";
+		echo "local: " . $local;*/
+
+		echo "working";
+
+		die();
+
 	}
-	die();
 }
+
+$connection = ftp_connect($host);
+$result = ftp_login($connection, $username, $password);
 
 $contents = ftp_nlist($connection, '.');
 
@@ -71,6 +99,36 @@ $newest = $versions[0];
 		$("#showothers").click(function() {
 			$("#otherversions").slideToggle();
 		});
+
+		$('form').submit(function(e) {
+			e.preventDefault();
+			console.log("start downloading");
+			/*request = $.ajax({
+				url: 'installer.php',
+				type: 'post',
+				data: { 'start_download' : 1, 'version' : $("input[name=version]").val() },
+			});*/
+
+			start = 1;
+
+			setInterval(function() {
+				console.log("get percent...");
+				/*progress = $.ajax({
+					url: 'installer.php',
+					type: 'post',
+					data: { 'start_download' : start, 'version' : $("input[name=version]").val() },
+				});
+
+				progress.done(function(response, textStatus, jqXHR) {
+					console.log('percent');
+					console.log(response);
+				});*/
+
+				
+
+				start = 0;
+			}, 1000);
+		});
 	});
 	</script>
 </head>
@@ -79,7 +137,7 @@ $newest = $versions[0];
 		<h1>Inkstand Installer</h1>
 		<p>Get ready for the most amazing CMS ever!</p><br><br>
 		<h4>Step 1: Choose version</h4>
-		<form method="post">
+		<form>
 			<div class="form-group">
 				<div id="newest" class="alert alert-success">
 					<input type="radio" name="version" value="<?php echo $newest['file'] ?>" checked> Inkstand <?php echo $newest['ver'] ?> <b>Recommended</b>
@@ -94,6 +152,15 @@ $newest = $versions[0];
 			<h4>Step 2: Install</h4>
 			<input type="submit" value="Install" class="btn btn-primary btn-lg btn-block">
 		</form>
+		<div id="installing" style="display:none">
+			<h4>Step 3: Downloading package</h4>
+			<p>Progress</p>
+			<div class="progress progress-striped active">
+			  <div class="progress-bar"  role="progressbar" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100" style="width: 45%">
+			    <span class="sr-only">45% Complete</span>
+			  </div>
+			</div>
+		</div>
 	</div>
 </body>
 </html>
