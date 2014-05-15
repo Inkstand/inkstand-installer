@@ -8,44 +8,91 @@ $password = "installer";
 
 $temppath = "temp.zip";
 
-//file_put_contents("Tmpfile.zip", fopen('https://github.com/joeconradt/inkstand/archive/master.zip', 'r'));
+/*
+ *
+ * Setup package_downloader for downloading inkstand packages
+ *
+ */
 
-if($_SERVER['REQUEST_METHOD'] === 'POST') {
+$package_downloader = "<?php
 
-	if($_POST['start_download'] == '1') {
+session_start();
 
-		$connection = ftp_connect($host);
-		$result = ftp_login($connection, $username, $password);
+\$connection = ftp_connect('$host');
+\$result = ftp_login(\$connection, '$username', '$password');
 
-		$package = $_POST['version'];
+\$package = \$_POST['version'];
 
-		$_SESSION['size'] = ftp_size($connection, $package);
+\$_SESSION['size'] = ftp_size(\$connection, \$package);
 
-		set_time_limit(500);
+session_write_close();
 
-		if (ftp_get($connection	, $temppath, $package, FTP_BINARY)) {
-	    	echo "Successfully written to $local_file\n";
-		} else {
-		    echo "There was a problem\n";
-		}
-		die();
-	} else {
+set_time_limit(500);
 
-		/*$source = $_SESSION['size'];
-
-		$local = filesize($temppath);
-
-		$percent = $local / $source;
-
-		echo "source: " . $source . "\n";
-		echo "local: " . $local;*/
-
-		echo "working";
-
-		die();
-
-	}
+if (ftp_get(\$connection, '$temppath', \$package, FTP_BINARY)) {
+	echo 'Successfully written to \$local_file\n';
+} else {
+    echo 'There was a problem\n';
 }
+die();
+
+?>
+";
+
+if(!file_exists('package_downloader.php')) {
+	file_put_contents('package_downloader.php', $package_downloader);
+}
+
+/*
+ *
+ * Setup package_downloader for downloading inkstand packages
+ *
+ */
+
+$package_progresser = "<?php
+
+ session_start();
+
+\$package = '$temppath';
+
+\$source = \$_SESSION['size'];
+\$local = filesize(\$package);
+
+echo (\$local / \$source);
+
+?>
+";
+
+if(!file_exists('package_progresser.php')) {
+	file_put_contents('package_progresser.php', $package_progresser);
+}
+
+/*
+ *
+ * Setup package_unpackager for unpacking
+ *
+ */
+
+$package_unpackager = "<?php
+
+\$zip = new ZipArchive;
+\$zip->open('$temppath');
+\$zip->extractTo('./');
+\$zip->close();
+
+unlink('package_downloader.php');
+unlink('package_progresser.php');
+unlink('$temppath');
+unlink(__FILE__);
+
+?>
+";
+
+if(!file_exists('package_unpackager.php')) {
+	file_put_contents('package_unpackager.php', $package_unpackager);
+}
+
+/* setup connection to FTP server */
 
 $connection = ftp_connect($host);
 $result = ftp_login($connection, $username, $password);
@@ -91,76 +138,155 @@ $newest = $versions[0];
 		{
 			font-size:20px;
 		}
-
+		.progress-bar
+		{
+			background-color:#ea7206;
+		}
+		#configure
+		{
+			display:none;
+		}
+		.spin
+		{
+			-webkit-animation-name: spin;
+		    -webkit-animation-duration: 1000ms;
+		    -webkit-animation-iteration-count: infinite;
+		    -webkit-animation-timing-function: linear;
+		    -moz-animation-name: spin;
+		    -moz-animation-duration: 1000ms;
+		    -moz-animation-iteration-count: infinite;
+		    -moz-animation-timing-function: linear;
+		    -ms-animation-name: spin;
+		    -ms-animation-duration: 1000ms;
+		    -ms-animation-iteration-count: infinite;
+		    -ms-animation-timing-function: linear;
+		    
+		    animation-name: spin;
+		    animation-duration: 1000ms;
+		    animation-iteration-count: infinite;
+		    animation-timing-function: linear;
+		}
+		@-ms-keyframes spin {
+		    from { -ms-transform: rotate(0deg); }
+		    to { -ms-transform: rotate(360deg); }
+		}
+		@-moz-keyframes spin {
+		    from { -moz-transform: rotate(0deg); }
+		    to { -moz-transform: rotate(360deg); }
+		}
+		@-webkit-keyframes spin {
+		    from { -webkit-transform: rotate(0deg); }
+		    to { -webkit-transform: rotate(360deg); }
+		}
+		@keyframes spin {
+		    from {
+		        transform:rotate(0deg);
+		    }
+		    to {
+		        transform:rotate(360deg);
+		    }
+		}
 	</style>
 
 	<script type="text/javascript">
+
+	var progressTimer;
+
 	$(document).ready(function() {
 		$("#showothers").click(function() {
 			$("#otherversions").slideToggle();
 		});
 
+		function ajaxClosure(url, _data) {
+			$.post(url, _data, function(data) {
+				if(!isNaN(data)) {
+					percent = (data * 100);
+					$(".progress-bar").css("width", percent + "%");
+
+					if(percent >= 100) {
+						clearInterval(progressTimer);
+						$(".progress-bar").css({"width" : "50%", "background-color" : "#1b4670"});
+
+						$.post('package_unpackager.php', {}, function() {
+							$(".progress-bar").css({"width" : "100%"});
+							nextStatus();
+							nextStatus();
+							$("#configure").slideDown();
+						});
+
+						nextStatus();
+					}
+				}
+			});
+		}
+
 		$('form').submit(function(e) {
 			e.preventDefault();
-			console.log("start downloading");
-			/*request = $.ajax({
-				url: 'installer.php',
-				type: 'post',
-				data: { 'start_download' : 1, 'version' : $("input[name=version]").val() },
-			});*/
 
-			start = 1;
+			$("#installing").slideDown();
+			$("#step1").css("opacity", 0.6);
+			$("#step2").css("opacity", 0.6);
+			$("form input[type=submit]").slideUp();
+			$("#inner-form").slideUp();
+			
+			ajaxClosure('package_downloader.php', { 'version' :  $("input[name=version]").val() });
 
-			setInterval(function() {
-				console.log("get percent...");
-				/*progress = $.ajax({
-					url: 'installer.php',
-					type: 'post',
-					data: { 'start_download' : start, 'version' : $("input[name=version]").val() },
-				});
-
-				progress.done(function(response, textStatus, jqXHR) {
-					console.log('percent');
-					console.log(response);
-				});*/
-
-				
-
-				start = 0;
-			}, 1000);
+			progressTimer = setInterval(function() {
+				ajaxClosure('package_progresser.php', {});
+			}, 50);
 		});
 	});
+
+	function nextStatus() {
+		var _this = $("#status .spin");
+		_this.removeClass("glyphicon-repeat");
+		_this.addClass("glyphicon-ok");
+		_this.removeClass("spin");
+
+		var index = $("li").index(_this.parent());
+
+		var next = $("#status li:nth-child(" + (index+2) + ") span");
+		next.addClass("glyphicon-repeat");
+		next.addClass("spin");
+	}
 	</script>
 </head>
 <body>
 	<div class="container">
 		<h1>Inkstand Installer</h1>
 		<p>Get ready for the most amazing CMS ever!</p><br><br>
-		<h4>Step 1: Choose version</h4>
+		<h4 id="step1">Step 1: Choose version</h4>
 		<form>
-			<div class="form-group">
-				<div id="newest" class="alert alert-success">
-					<input type="radio" name="version" value="<?php echo $newest['file'] ?>" checked> Inkstand <?php echo $newest['ver'] ?> <b>Recommended</b>
+			<div id="inner-form">
+				<div class="form-group">
+					<div id="newest" class="alert alert-success">
+						<input type="radio" name="version" value="<?php echo $newest['file'] ?>" checked> Inkstand <?php echo $newest['ver'] ?> <b>Recommended</b>
+					</div>
 				</div>
+				<a id="showothers" class="btn btn-default btn-sm">Show other versions</a>
+				<div id="otherversions" class="form-group alert alert-warning" style="display:none">
+					<?php foreach(array_slice($versions, 1) as $version) : ?>
+						<input type="radio" name="version" value="<?php echo $version['file'] ?>"> Inkstand ver: <?php echo $version['ver'] ?><br>
+					<?php endforeach; ?>
+				</div><br><br><br>
 			</div>
-			<a id="showothers" class="btn btn-default btn-sm">Show other versions</a>
-			<div id="otherversions" class="form-group alert alert-warning" style="display:none">
-				<?php foreach(array_slice($versions, 1) as $version) : ?>
-					<input type="radio" name="version" value="<?php echo $version['file'] ?>"> Inkstand ver: <?php echo $version['ver'] ?><br>
-				<?php endforeach; ?>
-			</div><br><br><br>
-			<h4>Step 2: Install</h4>
-			<input type="submit" value="Install" class="btn btn-primary btn-lg btn-block">
+			<h4 id="step2">Step 2: Start download</h4>
+			<input type="submit" value="Start" class="btn btn-primary btn-lg btn-block">
 		</form>
 		<div id="installing" style="display:none">
-			<h4>Step 3: Downloading package</h4>
-			<p>Progress</p>
+			<h4>Step 3: Downloading Inkstand</h4>
 			<div class="progress progress-striped active">
-			  <div class="progress-bar"  role="progressbar" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100" style="width: 45%">
-			    <span class="sr-only">45% Complete</span>
+			  <div class="progress-bar"  role="progressbar" aria-valuenow="45" aria-valuemin="0" aria-valuemax="100" style="width: 0%">
+			    <span class="sr-only"></span>
 			  </div>
 			</div>
+			<ul id="status" style="list-style:none !important">
+				<li><span class="glyphicon glyphicon-repeat spin"></span> Downloading...</li>
+				<li><span class="glyphicon"></span> Unpacking...</li>
+				<li><span class="glyphicon"></span> Finished</li>
+			</ul>
 		</div>
+		<a id="configure" class="btn btn-primary" href="index.php">Configure now</a>
 	</div>
 </body>
 </html>
